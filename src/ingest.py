@@ -18,7 +18,7 @@ def main():
         print("Error open source file(s). Exiting.")
         sys.exit(1)
     
-    column_names = ["filename","DSID_INTU","min_long","max_long","min_lat","max_lat"]
+    column_names = ["filename","DSID_INTU","min_long","max_long","min_lat","max_lat","center_long","center_lat"]
     existing_encs = []
     with open(os.path.join(output,"index.txt"),mode="r",newline='') as index_file:
         index_reader = csv.reader(index_file)
@@ -46,6 +46,11 @@ def main():
 
         #Add latitude and longitude of the area extent
         row.extend(ds.GetLayerByName("M_COVR").GetExtent())
+
+        #Add center long/lat
+        row.append(row[2]+(row[3]-row[2])/2)
+        row.append(row[4]+(row[5]-row[4])/2)
+
         print(row)
 
         rows_list.append(row)
