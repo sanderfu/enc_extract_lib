@@ -6,7 +6,8 @@ import sys, getopt, os, glob
 
 def main():
     targetPattern = "*.000"
-    enc_paths = glob.glob(targetPattern)
+    enc_paths = glob.glob(os.path.join("./backup",targetPattern))
+    print(enc_paths)
     outPoly = "mergedHazards"
     relevantLayers= ['DEPARE',"COALNE","LNDARE"]
     safeDepth = 0.1
@@ -37,6 +38,9 @@ def main():
     for layername in relevantLayers:
         for ds in ds_list:
             layer = ds.GetLayerByName(layername)
+            if layer==None:
+                print("Did not find layer: ", layername)
+                sys.exit(1)
 
             # Keep only Geometry areas less than "safeDepth" meter
             if (layername == "DEPARE"):
