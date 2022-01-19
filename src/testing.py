@@ -9,7 +9,7 @@ def main():
     enc_paths = glob.glob(os.path.join("./backup",targetPattern))
     print(enc_paths)
     outPoly = "mergedHazards"
-    relevantLayers= ['DEPARE',"COALNE","LNDARE"]
+    relevantLayers= ['DEPARE',"COALNE","LNDARE","M_COVR"]
     safeDepth = 0.1
 
     ds_list = []
@@ -48,7 +48,7 @@ def main():
 
             for feat in layer:
                 geom = feat.GetGeometryRef()
-                if (geom.GetGeometryName() == "POLYGON"):
+                if (geom.GetGeometryName() == "POLYGON" or geom.GetGeometryName() == "POINT"):
                     outFeatDefn = outLayerPoly.GetLayerDefn()
                     outFeat = ogr.Feature(outFeatDefn)
                     outFeat.SetGeometry(geom)
