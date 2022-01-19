@@ -6,10 +6,11 @@ import pandas as pd
 import numpy as np
 import math
 from enum import Enum
-
 from vincenty import vincenty
 
-feature_layer_names = ["LNDARE","DEPARE","OBSTRN","OFSPLF","PILPNT","PYLONS","SOUNDG","UWTROC","WRECKS","BCNSPP","BOYLAT","BRIDGE"]
+feature_layer_names = ["LNDARE","DEPARE","OBSTRN","OFSPLF","PILPNT","PYLONS","SOUNDG","UWTROC","WRECKS","BCNSPP","BOYLAT","BRIDGE","CTNARE","FAIRWY","RESARE"]
+collision_features  = ["LNDARE","DEPARE","OBSTRN","OFSPLF","PILPNT","PYLONS","SOUNDG","UWTROC","WRECKS","BCNSPP","BOYLAT","BRIDGE"]
+caution_features = ["CTNARE","FAIRWY","RESARE","BCNSPP","BOYLAT","OBSTRN","OFSPLF","PILPNT","PYLONS"]
 class S57(Enum):
     LNDARE = 0
     DEPARE = 1
@@ -23,12 +24,23 @@ class S57(Enum):
     BCNSPP = 9
     BOYLAT = 10
     BRIDGE = 11
+    CTNARE = 12
+    FAIRWY = 13
+    RESARE = 14
+
+class Mode(Enum):
+    COLLISION = 1
+    CAUTION = 2
+
+#Layers that must be duplicated as they are relevant for both collision and caution depending in fields
+duplicate_layers = ["RESARE"]
 
 def S57_to_str(s57:S57)->str:
     return feature_layer_names[s57]
 
 def str_to_S57(string:str)->S57:
-    return S57(feature_layer_names.index(string))
+    mod_string = string.split(sep="_")[0]
+    return S57(feature_layer_names.index(mod_string))
 
 def load_datasources(enc_paths: str, verbose=False)->list[ogr.DataSource]:
     datasources = []
@@ -97,12 +109,30 @@ def manipulate_layer(in_layer:ogr.Layer,verbose=False):
     elif str_to_S57(in_layer.GetName())==S57.BRIDGE:
         in_layer.SetAttributeFilter(f"VERCLR<{safe_height}")
 
-            
+def add_feature(in_layer: ogr.Layer, feature: ogr.Feature, mode: Mode)->bool:
+    """
+    Function for checking if a feature should be added or not.
+    For cases where an attribute filter can not be used (such as for RESARE)
+    """
+    if str_to_S57(in_layer.GetName())==S57.RESARE:
+        if feature.IsFieldSet("RESTRN"):
+            restrn_id = feature.GetFieldAsInteger("RESTRN")
+            if mode == Mode.COLLISION and restrn_id not in [7,14]:
+                return False
+            elif mode == Mode.CAUTION and restrn_id not in [8,13,27]:
+                return False
+        if feature.IsFieldSet("CATREA"):
+            catrea_id = feature.GetFieldAsInteger("CATREA")
+            if mode == Mode.COLLISION and catrea_id not in [9,12,14]:
+               return False
+            if mode == Mode.CAUTION and catrea_id not in [24]:
+               return False
+    return True
 
-
-def add_features_to_layer(in_layer:ogr.Layer,out_layer:ogr.Layer):
-    manipulate_layer(in_layer,verbose=True)
+def add_features_to_layer(in_layer:ogr.Layer,out_layer:ogr.Layer, mode:Mode):
+    manipulate_layer(in_layer,verbose=False)
     for feature in in_layer:
+        if(not add_feature(in_layer,feature,mode)): continue
         geom = feature.GetGeometryRef()
         if (geom.GetGeometryName() == "POINT"):
             #Has to make a polygon with the center and length of the the area the point describes
@@ -116,14 +146,16 @@ def add_features_to_layer(in_layer:ogr.Layer,out_layer:ogr.Layer):
             outFeat = ogr.Feature(outFeatDefn)
             outFeat.SetGeometry(geom)
             out_layer.CreateFeature(outFeat)
+    in_layer.ResetReading()
 
 def extract_collision_features(layername:str, in_ds:ogr.DataSource, out_ds:ogr.DataSource):
     """
-    Extracts all geometry features from the LNDARE layer 
+    Extracts all geometry features from the collision relevant layers
     in the ENC to the collision layer in the target shapefile
     """
+    
     in_layer = in_ds.GetLayerByName(layername)
-    out_layer = out_ds.GetLayerByName("COLLI2")
+    out_layer = out_ds.GetLayerByName("COLLISION")
 
     if in_layer==None:
         print(layername, "not in file")
@@ -132,8 +164,24 @@ def extract_collision_features(layername:str, in_ds:ogr.DataSource, out_ds:ogr.D
     elif out_layer==None:
         raise RuntimeError("Collision layer not defined in target datasource")
 
-    add_features_to_layer(in_layer,out_layer)
-        
+    add_features_to_layer(in_layer,out_layer,Mode.COLLISION)
+
+def extract_caution_features(layername:str, in_ds:ogr.DataSource, out_ds:ogr.DataSource):
+    in_layer = in_ds.GetLayerByName(layername)
+    out_layer = out_ds.GetLayerByName("CAUTION")
+    if in_layer==None:
+        print(layername, "not in file")
+        #Not an issue, the tile can be all ocean, in that case there is no LNDARE feature
+        return
+    elif out_layer==None:
+        raise RuntimeError("Collision layer not defined in target datasource")
+    add_features_to_layer(in_layer,out_layer,Mode.CAUTION)
+
+def extract_feature(layername:str, in_ds:ogr.DataSource, out_ds:ogr.DataSource):
+    if layername in collision_features:
+        extract_collision_features(layername,in_ds,out_ds)
+    if layername in caution_features:
+        extract_caution_features(layername,in_ds,out_ds)
 
 def calculate_wgs_reference()->osr.SpatialReference:
     wgs_reference = osr.SpatialReference()
@@ -151,13 +199,14 @@ def main():
     if os.path.exists(outPoly):
         driver.DeleteDataSource(outPoly)
     outDSPoly = driver.CreateDataSource(outPoly)
-
    
-    outLayerPoly = outDSPoly.CreateLayer("COLLI2", calculate_wgs_reference(), ogr.wkbPolygon)
+    out_collision_poly = outDSPoly.CreateLayer("COLLISION", calculate_wgs_reference(), ogr.wkbPolygon)
+    out_caution_poly = outDSPoly.CreateLayer("CAUTION", calculate_wgs_reference(), ogr.wkbPolygon)
     for ds in ds_list:
         for featurename in feature_layer_names:
-            extract_collision_features(featurename,ds,outDSPoly)
+            extract_feature(featurename,ds,outDSPoly)
     
+
 
 
 main()
