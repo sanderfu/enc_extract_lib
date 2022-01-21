@@ -9,6 +9,7 @@ def calculate_wgs_reference()->osr.SpatialReference:
     wgs_reference = osr.SpatialReference()
     wgs_reference.ImportFromEPSG(4326)
     return wgs_reference
+
 def main():
     targetPattern = "*.000"
     enc_paths = glob.glob(os.path.join("./backup",targetPattern))
@@ -30,13 +31,6 @@ def main():
     if os.path.exists(outPoly):
         driver.DeleteDataSource(outPoly)
     out_ds = driver.CreateDataSource(outPoly)
-    
-    wgs_reference = osr.SpatialReference()
-    wgs_reference.ImportFromEPSG(4326)
-    utm_32v_reference = osr.SpatialReference()
-    utm_32v_reference.SetProjCS("UTM 32 / WGS84")
-    utm_32v_reference.SetWellKnownGeogCS("WGS84")
-    utm_32v_reference.SetUTM(32)
 
     #Define layers
     layer_dict = {}

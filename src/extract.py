@@ -187,14 +187,11 @@ def calculate_wgs_reference()->osr.SpatialReference:
     wgs_reference.ImportFromEPSG(4326)
     return wgs_reference
 
-
-
-
 def dissolve_layer(in_poly:ogr.Layer, out_ds:ogr.DataSource, multipoly=False)->ogr.Layer:
     """
     Disclaimer: This funtion is based on the core method in dissolve.py in map-extraction by @olesot
     """
-    out_collision_poly_dissolved = out_ds.CreateLayer(in_poly.GetName()+"_DISSOLVED", calculate_wgs_reference(), ogr.wkbMultiPolygon)
+    out_collision_poly_dissolved = out_ds.CreateLayer(in_poly.GetName()+"_DISSOLVED", calculate_wgs_reference(), ogr.wkbPolygon)
     defn = out_collision_poly_dissolved.GetLayerDefn()
     multi = ogr.Geometry(ogr.wkbMultiPolygon)
     for feat in in_poly:
@@ -214,7 +211,44 @@ def dissolve_layer(in_poly:ogr.Layer, out_ds:ogr.DataSource, multipoly=False)->o
         out_feat = ogr.Feature(defn)
         out_feat.SetGeometry(union)
         out_collision_poly_dissolved.CreateFeature(out_feat)
+
+    #Delete original layers
     return out_collision_poly_dissolved
+
+def create_lookup_database(lookup_db:ogr.DataSource, enc_ds_list:list[ogr.DataSource]):
+    #Define layers
+    layer_dict = {}
+    for ds in enc_ds_list:
+        for i in range(ds.GetLayerCount()):
+            layer = ds.GetLayerByIndex(i)
+            if not layer.GetName() in feature_layer_names: continue 
+            if lookup_db.GetLayerByName(layer.GetName())==None:
+                #print("Layer ", layer.GetName().upper(), " does not exist,creating")
+                layer_dict[layer.GetName()] = lookup_db.CreateLayer(layer.GetName(), calculate_wgs_reference(), layer.GetGeomType())
+
+    for ds in enc_ds_list:
+        for i in range(ds.GetLayerCount()):
+            layer = ds.GetLayerByIndex(i)
+            if not layer.GetName() in feature_layer_names: continue
+            for feature in layer:
+                defn = layer_dict[layer.GetName()].GetLayerDefn()
+                wkt = feature.geometry().ExportToWkt()
+                append_feat = ogr.Feature(defn)
+                poly = ogr.CreateGeometryFromWkt(wkt)
+                append_feat.SetGeometry(poly)
+                layer_dict[layer.GetName()].CreateFeature(append_feat)
+    
+def create_check_db(check_db:ogr.DataSource, enc_ds_list:list[ogr.DataSource]):
+    for ds in enc_ds_list:
+        for featurename in feature_layer_names:
+            extract_feature(featurename,ds,check_db)
+    
+    #Dissolve collision layer or make multipolygon of it
+    for i in range(check_db.GetLayerCount()):
+        dissolve_layer(check_db.GetLayerByIndex(i),check_db)
+    
+    check_db.DeleteLayer("collision")
+    check_db.DeleteLayer("caution")
 
 
 def main():
@@ -223,19 +257,25 @@ def main():
     #ds_list = load_datasources(determine_charts_to_load(start,end2))
     ds_list = get_all_datasources()
 
-    outPoly = "extractedPolygons"
-    driver = ogr.GetDriverByName("ESRI Shapefile")
+    outPoly = "./databases/check_db.sqlite"
+    driver = ogr.GetDriverByName("SQLite")
     if os.path.exists(outPoly):
         driver.DeleteDataSource(outPoly)
     outDSPoly = driver.CreateDataSource(outPoly)
    
     out_collision_poly = outDSPoly.CreateLayer("COLLISION", calculate_wgs_reference(), ogr.wkbPolygon)
     out_caution_poly = outDSPoly.CreateLayer("CAUTION", calculate_wgs_reference(), ogr.wkbPolygon)
-    for ds in ds_list:
-        for featurename in feature_layer_names:
-            extract_feature(featurename,ds,outDSPoly)
+    create_check_db(outDSPoly,ds_list)
+
+    lookup_path = "./databases/lookup_db.sqlite"
+    lookup_ds = driver.CreateDataSource(lookup_path)
+    create_lookup_database(lookup_ds,ds_list)
     
-    #Dissolve collision layer or make multipolygon of it
-    dissolve_layer(out_collision_poly,outDSPoly)
-    dissolve_layer(out_caution_poly,outDSPoly)
+    #for ds in ds_list:
+    #    for featurename in feature_layer_names:
+    #        extract_feature(featurename,ds,outDSPoly)
+    #
+    ##Dissolve collision layer or make multipolygon of it
+    #dissolve_layer(out_collision_poly,outDSPoly)
+    #dissolve_layer(out_caution_poly,outDSPoly)
 main()
