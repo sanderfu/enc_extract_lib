@@ -1,5 +1,6 @@
 #!/usr/bin/python
 from __future__ import annotations
+from xmlrpc.client import Boolean
 from osgeo import ogr, osr, gdal
 import sys, getopt, os, glob
 import pandas as pd
@@ -10,7 +11,7 @@ from vincenty import vincenty
 import time
 
 feature_layer_names = ["LNDARE","DEPARE","OBSTRN","OFSPLF","PILPNT","PYLONS","SOUNDG","UWTROC","WRECKS","BCNSPP","BOYLAT","BRIDGE","CTNARE","FAIRWY","RESARE"]
-collision_features  = ["LNDARE","DEPARE","OBSTRN","OFSPLF","PILPNT","PYLONS","SOUNDG","UWTROC","WRECKS","BCNSPP","BOYLAT","BRIDGE"]
+collision_features  = ["LNDARE","DEPARE"] #,"OBSTRN","OFSPLF","PILPNT","PYLONS","SOUNDG","UWTROC","WRECKS","BCNSPP","BOYLAT","BRIDGE"]
 caution_features = ["CTNARE","FAIRWY","RESARE","BCNSPP","BOYLAT","OBSTRN","OFSPLF","PILPNT","PYLONS"]
 class S57(Enum):
     LNDARE = 0
@@ -45,18 +46,27 @@ def str_to_S57(string:str)->S57:
 
 def load_datasources(enc_paths: str, verbose=False)->list[ogr.DataSource]:
     datasources = []
+    print("Number of datasources: ", len(enc_paths))
     for enc_path in enc_paths:
         datasources.append(gdal.OpenEx(enc_path))
     if None in datasources:
         raise RuntimeError("Failed to load all datasources",enc_paths)
     return datasources
 
+def point_in_region(point_lon,point_lat,min_ll,max_ll) -> bool:
+    min_long = min_ll[0]
+    min_lat = min_ll[1]
+
+    max_long = max_ll[0]
+    max_lat = max_ll[1]
+    return point_lon>=min_long and point_lat>=min_lat and point_lon<=max_long and point_lat<=max_lat
+
 
 def determine_charts_to_load(min_ll:tuple(float,float),max_ll:tuple(float)) -> str:
     """
     Determine which charts to load
 
-    Remember that latitude (N/S) comes first, then longitude (E/W) in tuples
+    Remember that longitude(E/W) , then latitude (N/S) in tuples
     """
     index_df = pd.read_csv("./registered/index.txt")
 
@@ -68,8 +78,8 @@ def determine_charts_to_load(min_ll:tuple(float,float),max_ll:tuple(float)) -> s
     tile_max = None
 
     for k,row in index_df.iterrows():
-        distance_min = np.sqrt(pow(row["center_lat"]-min_ll[0],2)+pow(row["center_long"]-min_ll[1],2))
-        distance_max = np.sqrt(pow(row["center_lat"]-max_ll[0],2)+pow(row["center_long"]-max_ll[1],2))
+        distance_min = np.sqrt(pow(row["center_lat"]-min_ll[1],2)+pow(row["center_long"]-min_ll[0],2))
+        distance_max = np.sqrt(pow(row["center_lat"]-max_ll[1],2)+pow(row["center_long"]-max_ll[0],2))
 
         if smallest_distance_min>distance_min:
             smallest_distance_min = distance_min
@@ -78,14 +88,32 @@ def determine_charts_to_load(min_ll:tuple(float,float),max_ll:tuple(float)) -> s
             smallest_distance_max = distance_max
             tile_max = row
 
-    #Find all columns between(including ends)
-    to_load_df = index_df.loc[((index_df["min_long"]<=tile_max["min_long"]) & (index_df["min_lat"]<=tile_max["min_lat"]) & (index_df["min_long"]>=tile_min["min_long"]) & (index_df["min_lat"]>=tile_min["min_lat"]))]
+    min_long = min_ll[0]
+    min_lat = min_ll[1]
 
-    storage_path = "./registered"
+    max_long = max_ll[0]
+    max_lat = max_ll[1]
+
+    #Logic for lower left point
     enc_paths = []
-    for k, row in to_load_df.iterrows():
-        enc_paths.append(os.path.join(storage_path,row["filename"]))
-    
+    storage_path = "./registered"
+    for index, row in index_df.iterrows():
+        #Check if lower left is in mission region
+        if point_in_region(row["min_long"],row["min_lat"],min_ll,max_ll):
+            enc_paths.append(os.path.join(storage_path,row["filename"]))
+            continue
+        #Check if upper left is in mission region
+        if point_in_region(row["min_long"],row["max_lat"],min_ll,max_ll): 
+            enc_paths.append(os.path.join(storage_path,row["filename"]))
+            continue
+        #Check if upper right is in mission region
+        if point_in_region(row["max_long"],row["max_lat"],min_ll,max_ll): 
+            enc_paths.append(os.path.join(storage_path,row["filename"]))
+            continue
+        #Check if lower right is in mission region
+        if point_in_region(row["max_long"],row["min_lat"],min_ll,max_ll): 
+            enc_paths.append(os.path.join(storage_path,row["filename"]))
+            continue
     return enc_paths
 
 def get_all_datasources() -> list[ogr.DataSource]:
@@ -252,10 +280,10 @@ def create_check_db(check_db:ogr.DataSource, enc_ds_list:list[ogr.DataSource]):
 
 
 def main():
-    start = (40.56638,-73.88525)
-    end2 = (40.51,-73.83934)
-    #ds_list = load_datasources(determine_charts_to_load(start,end2))
-    ds_list = get_all_datasources()
+    start = (-74.02483,40.49961)
+    end2 = (-73.72579,40.64967)
+    ds_list = load_datasources(determine_charts_to_load(start,end2))
+    #ds_list = get_all_datasources()
 
     outPoly = "./databases/check_db.sqlite"
     driver = ogr.GetDriverByName("SQLite")
