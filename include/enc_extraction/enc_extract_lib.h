@@ -51,8 +51,7 @@ struct extractorVessel{
 class ENCExtractor{
     public:
         ENCExtractor(extractorRegion& r, extractorVessel& v, GDALDataset* check_db_);
-        void createCheckDB();
-        void createDetailedDB();
+        void run();
     private:
         std::vector<GDALDataset*> datasets_;
         std::string path_;

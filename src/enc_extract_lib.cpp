@@ -166,7 +166,7 @@ void ENCExtractor::dissolveLayer(OGRLayer* in_layer, GDALDataset* in_ds, GDALDat
     }
 }
 
-void ENCExtractor::createCheckDB(){
+void ENCExtractor::run(){
     for (auto ds_it=datasets_.begin(); ds_it!=datasets_.end(); ds_it++){
         for (auto feature_it=feature_layer_names.begin(); feature_it!=feature_layer_names.end(); feature_it++){
             extractFeature(*feature_it,*ds_it,check_db_);
