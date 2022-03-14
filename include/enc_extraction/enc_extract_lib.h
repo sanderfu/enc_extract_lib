@@ -51,7 +51,9 @@ struct extractorVessel{
 class ENCExtractor{
     public:
         ENCExtractor(extractorRegion& r, extractorVessel& v, GDALDataset* check_db_);
-    //private:
+        void createCheckDB();
+        void createDetailedDB();
+    private:
         std::vector<GDALDataset*> datasets_;
         std::string path_;
         extractorRegion region_;
@@ -74,9 +76,6 @@ class ENCExtractor{
         void extractCautionFeatures(OGRLayer* in_layer, GDALDataset* out_ds);
         void extractFeature(std::string layername, GDALDataset* in_ds, GDALDataset* out_ds);
         void dissolveLayer(OGRLayer* in_layer, GDALDataset* in_ds, GDALDataset* out_ds);
-
-        void createCheckDB();
-        void createDetailedDB();
 
 
 

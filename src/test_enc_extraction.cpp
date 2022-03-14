@@ -17,7 +17,6 @@ int main(int argc, char *argv[]){
     std::string check_path = path+"/data/check_db.sqlite";
     GDALDataset* check_db = driver_sqlite->Create(check_path.c_str(),0,0,0,GDT_Unknown,NULL);
     ENCExtractor extractor(r,v,check_db);
-    extractor.loadDatasets(extractor.determineChartsToLoad(r));
     extractor.createCheckDB();
     //ros::spin();
 }

@@ -8,6 +8,7 @@ check_db_(check_db){
     check_db_->CreateLayer("COLLISION", OGRSpatialReference::GetWGS84SRS(), wkbPolygon);
     check_db_->CreateLayer("CAUTION", OGRSpatialReference::GetWGS84SRS(), wkbPolygon);
     
+    loadDatasets(determineChartsToLoad(region_));
 }
 
 void ENCExtractor::loadDatasets(std::vector<std::string> enc_paths){
