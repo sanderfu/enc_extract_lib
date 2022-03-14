@@ -7,7 +7,6 @@ import pandas as pd
 import numpy as np
 import math
 from enum import Enum
-from vincenty import vincenty
 import time
 
 feature_layer_names = ["LNDARE","DEPARE","OBSTRN","OFSPLF","PILPNT","PYLONS","SOUNDG","UWTROC","WRECKS","BCNSPP","BOYLAT","BRIDGE","CTNARE","FAIRWY","RESARE"]
@@ -69,30 +68,6 @@ def determine_charts_to_load(min_ll:tuple(float,float),max_ll:tuple(float)) -> s
     Remember that longitude(E/W) , then latitude (N/S) in tuples
     """
     index_df = pd.read_csv("./registered/index.txt")
-
-    #Calculate distance to all tiles from min
-    smallest_distance_min = math.inf
-    smallest_distance_max = math.inf
-
-    tile_min = None
-    tile_max = None
-
-    for k,row in index_df.iterrows():
-        distance_min = np.sqrt(pow(row["center_lat"]-min_ll[1],2)+pow(row["center_long"]-min_ll[0],2))
-        distance_max = np.sqrt(pow(row["center_lat"]-max_ll[1],2)+pow(row["center_long"]-max_ll[0],2))
-
-        if smallest_distance_min>distance_min:
-            smallest_distance_min = distance_min
-            tile_min = row
-        if smallest_distance_max>distance_max:
-            smallest_distance_max = distance_max
-            tile_max = row
-
-    min_long = min_ll[0]
-    min_lat = min_ll[1]
-
-    max_long = max_ll[0]
-    max_lat = max_ll[1]
 
     #Logic for lower left point
     enc_paths = []
@@ -282,6 +257,7 @@ def create_check_db(check_db:ogr.DataSource, enc_ds_list:list[ogr.DataSource]):
 def main():
     start = (-74.02483,40.49961)
     end2 = (-73.72579,40.64967)
+    print(determine_charts_to_load(start,end2))
     ds_list = load_datasources(determine_charts_to_load(start,end2))
     #ds_list = get_all_datasources()
 
