@@ -1,17 +1,10 @@
 #include "enc_extraction/enc_extract_lib.h"
 
-ENCExtractor::ENCExtractor(std::string path, extractorRegion& r, extractorVessel& v):
-path_(path),
+ENCExtractor::ENCExtractor(extractorRegion& r, extractorVessel& v,GDALDataset* check_db):
 region_(r),
-vessel_(v){
+vessel_(v),
+check_db_(check_db){
     GDALAllRegister();
-    GDALDriver* driver_sqlite = GetGDALDriverManager()->GetDriverByName("SQLite");
-    if(driver_sqlite==NULL){
-        throw std::runtime_error("Unable to find SQLite driver");
-        return;
-    }
-    std::string check_path = path_+"/data/check_db.sqlite";
-    check_db_ = driver_sqlite->Create(check_path.c_str(),0,0,0,GDT_Unknown,NULL);
     check_db_->CreateLayer("COLLISION", OGRSpatialReference::GetWGS84SRS(), wkbPolygon);
     check_db_->CreateLayer("CAUTION", OGRSpatialReference::GetWGS84SRS(), wkbPolygon);
     
@@ -28,13 +21,13 @@ void ENCExtractor::loadDatasets(std::vector<std::string> enc_paths){
 }
 
 bool ENCExtractor::pointInRegion(double lon, double lat, extractorRegion& r){
-    return lon>=r.min_lon && lat>=r.min_lat && lon<=r.max_lon && lat<=r.max_lat;
+    return lon>=r.min_lon_ && lat>=r.min_lat_ && lon<=r.max_lon_ && lat<=r.max_lat_;
 }
 
 std::vector<std::string> ENCExtractor::determineChartsToLoad(extractorRegion& r){
     std::vector<std::string> enc_paths;
     std::ifstream index_file;
-    index_file.open(path_+"/registered/index.txt");
+    index_file.open("/home/sanderfu/catkin_ws/src/enc-extraction/registered/index.txt");
     if(!index_file){
         throw std::runtime_error("Unable to open ENC index file");
         exit(1);
@@ -53,13 +46,13 @@ std::vector<std::string> ENCExtractor::determineChartsToLoad(extractorRegion& r)
             std::vector<std::string> row;
             boost::algorithm::split(row, line, boost::is_any_of(","));
             if (pointInRegion(std::stod(row[header_map_["min_long"]]),std::stod(row[header_map_["min_lat"]]),r)){
-                enc_paths.push_back(path_+"/registered/"+row[header_map_["filename"]]);
+                enc_paths.push_back("/home/sanderfu/catkin_ws/src/enc-extraction/registered/"+row[header_map_["filename"]]);
             } else if (pointInRegion(std::stod(row[header_map_["min_long"]]),std::stod(row[header_map_["max_lat"]]),r)){
-                enc_paths.push_back(path_+"/registered/"+row[header_map_["filename"]]);
+                enc_paths.push_back("/home/sanderfu/catkin_ws/src/enc-extraction/registered/"+row[header_map_["filename"]]);
             } else if (pointInRegion(std::stod(row[header_map_["max_long"]]),std::stod(row[header_map_["max_lat"]]),r)){
-                enc_paths.push_back(path_+"/registered/"+row[header_map_["filename"]]);
+                enc_paths.push_back("/home/sanderfu/catkin_ws/src/enc-extraction/registered/"+row[header_map_["filename"]]);
             } else if (pointInRegion(std::stod(row[header_map_["max_long"]]),std::stod(row[header_map_["min_lat"]]),r)){
-                enc_paths.push_back(path_+"/registered/"+row[header_map_["filename"]]);
+                enc_paths.push_back("/home/sanderfu/catkin_ws/src/enc-extraction/registered/"+row[header_map_["filename"]]);
             }
         }
     }
@@ -74,13 +67,13 @@ void ENCExtractor::manipulateLayer(OGRLayer* layer, bool verbose){
         break;
     case S57::DEPARE:
         if (verbose) std::cout << "Layer is DEPARE, only keep features where ship risks grounding" << std::endl;
-        layer->SetAttributeFilter(("DRVAL1 < " + std::to_string(vessel_.draft+vessel_.draft_safety_margin)).c_str());
+        layer->SetAttributeFilter(("DRVAL1 < " + std::to_string(vessel_.draft_)).c_str());
         break;
     case S57::OBSTRN:
-        layer->SetAttributeFilter(("EXPSOU = 2 and VALSOU < "+std::to_string(vessel_.draft+vessel_.draft_safety_margin)).c_str());
+        layer->SetAttributeFilter(("EXPSOU = 2 and VALSOU < "+std::to_string(vessel_.draft_)).c_str());
         break;
     case S57::BRIDGE:
-        layer->SetAttributeFilter(("VERCLR<"+std::to_string(vessel_.height+vessel_.height_safety_margin)).c_str());
+        layer->SetAttributeFilter(("VERCLR<"+std::to_string(vessel_.height_)).c_str());
         break;
     default:
         break;
@@ -112,7 +105,7 @@ void ENCExtractor::addFeaturesToLayer(OGRLayer* in_layer,OGRLayer* out_layer, Mo
         if(!addFeature(in_layer,feat,mode)) continue;
         OGRGeometry* geom = feat->GetGeometryRef();
         if(std::string(geom->getGeometryName())=="POINT"){
-            OGRGeometry* geom_buffered = geom->Buffer(0.00001*(vessel_.length+vessel_.horisontal_safety_margin)); //0.00001 is approx 1.11 m
+            OGRGeometry* geom_buffered = geom->Buffer(0.00001*(vessel_.length_)); //0.00001 is approx 1.11 m
             OGRFeature* new_feat = OGRFeature::CreateFeature(out_layer->GetLayerDefn());
             new_feat->SetGeometry(geom_buffered);
             out_layer->CreateFeature(new_feat);

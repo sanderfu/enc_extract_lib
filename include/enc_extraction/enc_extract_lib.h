@@ -31,26 +31,26 @@ enum Mode{
 };
 
 struct extractorRegion{
-    double min_lon;
-    double min_lat;
-    double max_lon;
-    double max_lat;
+    extractorRegion(double min_lon, double min_lat, double max_lon, double max_lat):
+    min_lon_(min_lon), min_lat_(min_lat), max_lon_(max_lon),max_lat_(max_lat){}
+    double min_lon_;
+    double min_lat_;
+    double max_lon_;
+    double max_lat_;
 };
 
 struct extractorVessel{
-    double width;
-    double length;
-    double height;
-    double draft;
-    //
-    double draft_safety_margin;
-    double height_safety_margin;
-    double horisontal_safety_margin;
+    extractorVessel(double width, double length, double height,double draft):
+    width_(width), length_(length), height_(height), draft_(draft){}
+    double width_;
+    double length_;
+    double height_;
+    double draft_;
 };
 
 class ENCExtractor{
     public:
-        ENCExtractor(std::string path, extractorRegion& r, extractorVessel& v);
+        ENCExtractor(extractorRegion& r, extractorVessel& v, GDALDataset* check_db_);
     //private:
         std::vector<GDALDataset*> datasets_;
         std::string path_;
