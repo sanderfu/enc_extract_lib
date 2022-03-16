@@ -26,8 +26,9 @@ enum S57{
 };
 
 enum Mode{
-    COLLISION = 1,
-    CAUTION = 2,
+    COLLISION_M = 1,
+    CAUTION_M = 2,
+    COVERAGE_M = 3,
 };
 
 struct extractorRegion{
@@ -61,7 +62,7 @@ class ENCExtractor{
         GDALDataset* check_db_;
         GDALDataset* detailed_db_;
 
-        std::vector<std::string> feature_layer_names = {"LNDARE","DEPARE","OBSTRN","OFSPLF","PILPNT","PYLONS","SOUNDG","UWTROC","WRECKS","BCNSPP","BOYLAT","BRIDGE","CTNARE","FAIRWY","RESARE"};
+        std::vector<std::string> feature_layer_names = {"LNDARE","DEPARE","OBSTRN","OFSPLF","PILPNT","PYLONS","SOUNDG","UWTROC","WRECKS","BCNSPP","BOYLAT","BRIDGE","CTNARE","FAIRWY","RESARE","M_COVR"};
         std::vector<std::string> collision_features  = {"LNDARE","DEPARE"}; //,"OBSTRN","OFSPLF","PILPNT","PYLONS","SOUNDG","UWTROC","WRECKS","BCNSPP","BOYLAT","BRIDGE"};
         std::vector<std::string> caution_features = {"CTNARE","FAIRWY","RESARE","BCNSPP","BOYLAT","OBSTRN","OFSPLF","PILPNT","PYLONS"};
 
@@ -73,6 +74,8 @@ class ENCExtractor{
         void addFeaturesToLayer(OGRLayer* in_layer,OGRLayer* out_layer, Mode mode);
         void extractCollisionFeatures(OGRLayer* in_layer, GDALDataset* out_ds);
         void extractCautionFeatures(OGRLayer* in_layer, GDALDataset* out_ds);
+        void extractMapCoverage(OGRLayer* in_layer, GDALDataset* out_ds);
+        void extractUnknown(OGRLayer* in_layer, GDALDataset* out_ds);
         void extractFeature(std::string layername, GDALDataset* in_ds, GDALDataset* out_ds);
         void dissolveLayer(OGRLayer* in_layer, GDALDataset* in_ds, GDALDataset* out_ds);
 

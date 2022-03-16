@@ -7,6 +7,9 @@ check_db_(check_db){
     GDALAllRegister();
     check_db_->CreateLayer("COLLISION", OGRSpatialReference::GetWGS84SRS(), wkbPolygon);
     check_db_->CreateLayer("CAUTION", OGRSpatialReference::GetWGS84SRS(), wkbPolygon);
+    check_db_->CreateLayer("MAP_COVERAGE", OGRSpatialReference::GetWGS84SRS(), wkbPolygon);
+    check_db_->CreateLayer("UNKNOWN", OGRSpatialReference::GetWGS84SRS(), wkbPolygon);
+
     
     loadDatasets(determineChartsToLoad(region_));
 }
@@ -86,13 +89,13 @@ bool ENCExtractor::addFeature(OGRLayer* layer, OGRFeature* feature, Mode mode){
     if (stringToS57(layer->GetName())==S57::RESARE){
         if (feature->IsFieldSet(feature->GetFieldIndex("RESTRN"))){
             int restrn_id = feature->GetFieldAsInteger64("RESTRN");
-            if (mode == Mode::COLLISION && (restrn_id!=7 && restrn_id!=14)) return false;
-            else if(mode == Mode::CAUTION && (restrn_id!=8 && restrn_id!=13 && restrn_id!=27)) return false;
+            if (mode == Mode::COLLISION_M && (restrn_id!=7 && restrn_id!=14)) return false;
+            else if(mode == Mode::CAUTION_M && (restrn_id!=8 && restrn_id!=13 && restrn_id!=27)) return false;
         }
         if (feature->IsFieldSet(feature->GetFieldIndex("CATREA"))){
             int catrea_id = feature->GetFieldAsInteger64("CATREA");
-            if(mode==Mode::COLLISION && (catrea_id!=9 && catrea_id!=12 && catrea_id!=14)) return false;
-            else if(mode==Mode::CAUTION && (catrea_id!=24)) return false;
+            if(mode==Mode::COLLISION_M && (catrea_id!=9 && catrea_id!=12 && catrea_id!=14)) return false;
+            else if(mode==Mode::CAUTION_M && (catrea_id!=24)) return false;
         }
     }
     return true;
@@ -124,7 +127,7 @@ void ENCExtractor::extractCollisionFeatures(OGRLayer* in_layer, GDALDataset* out
     if(out_layer==NULL){
         throw std::runtime_error("Unable to open collision layer in output dataset");
     }
-    addFeaturesToLayer(in_layer,out_layer,Mode::COLLISION);
+    addFeaturesToLayer(in_layer,out_layer,Mode::COLLISION_M);
 }
 
 void ENCExtractor::extractCautionFeatures(OGRLayer* in_layer, GDALDataset* out_ds){
@@ -132,7 +135,44 @@ void ENCExtractor::extractCautionFeatures(OGRLayer* in_layer, GDALDataset* out_d
     if(out_layer==NULL){
         throw std::runtime_error("Unable to open collision layer in output dataset");
     }
-    addFeaturesToLayer(in_layer,out_layer,Mode::CAUTION);
+    addFeaturesToLayer(in_layer,out_layer,Mode::CAUTION_M);
+}
+
+void ENCExtractor::extractMapCoverage(OGRLayer* in_layer, GDALDataset* out_ds){
+    OGRLayer* out_layer = out_ds->GetLayerByName("map_coverage");
+    if(out_layer==NULL){
+        throw std::runtime_error("Unable to open collision layer in output dataset");
+    }
+    addFeaturesToLayer(in_layer,out_layer,Mode::COVERAGE_M);
+}
+
+void ENCExtractor::extractUnknown(OGRLayer* in_layer, GDALDataset* out_ds){
+    OGRPolygon region;
+    OGRLinearRing region_ring;
+    region_ring.addPointM(region_.min_lon_,region_.min_lat_,0);
+    region_ring.addPointM(region_.min_lon_,region_.max_lat_,0);
+    region_ring.addPointM(region_.max_lon_,region_.max_lat_,0);
+    region_ring.addPointM(region_.max_lon_,region_.min_lat_,0);
+    region_ring.addPointM(region_.min_lon_,region_.min_lat_,0);
+    region.addRing(&region_ring);
+    
+    OGRMultiPolygon map_coverage;
+    OGRFeature* feat;
+    in_layer->ResetReading();
+    while((feat=in_layer->GetNextFeature())!=NULL){
+        map_coverage.addGeometry(feat->GetGeometryRef());
+        OGRFeature::DestroyFeature(feat);
+    }
+    
+    OGRPolygon* map_coverage_poly = map_coverage.Simplify(0.0001)->toPolygon(); //Ramer–Douglas–Peucker algorithm used for simplify
+    OGRPolygon unknown_poly = *region.Difference(map_coverage_poly)->toPolygon();
+    OGRLayer* out_layer = out_ds->GetLayerByName("unknown");
+    if(out_layer==NULL){
+        throw std::runtime_error("Unable to open collision layer in output dataset");
+    }
+    OGRFeature* new_feat = OGRFeature::CreateFeature(out_layer->GetLayerDefn());
+    new_feat->SetGeometry(&unknown_poly);
+    out_layer->CreateFeature(new_feat);
 }
 
 void ENCExtractor::extractFeature(std::string layername, GDALDataset* in_ds, GDALDataset* out_ds){
@@ -145,6 +185,9 @@ void ENCExtractor::extractFeature(std::string layername, GDALDataset* in_ds, GDA
     }
     if(std::find(caution_features.begin(),caution_features.end(),layername)!=caution_features.end()){
        extractCautionFeatures(in_layer,out_ds);
+    }
+    if(layername=="M_COVR"){
+        extractMapCoverage(in_layer,out_ds);
     }
 }
 
@@ -172,6 +215,7 @@ void ENCExtractor::run(){
             extractFeature(*feature_it,*ds_it,check_db_);
         }
     }
+    extractUnknown(check_db_->GetLayerByName("map_coverage"),check_db_);
     dissolveLayer(check_db_->GetLayerByName("collision"),check_db_,check_db_);
     dissolveLayer(check_db_->GetLayerByName("caution"),check_db_,check_db_);
 }
