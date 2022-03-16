@@ -76,6 +76,7 @@ class ENCExtractor{
         void extractCautionFeatures(OGRLayer* in_layer, GDALDataset* out_ds);
         void extractMapCoverage(OGRLayer* in_layer, GDALDataset* out_ds);
         void extractUnknown(OGRLayer* in_layer, GDALDataset* out_ds);
+        void extractMissionRegion(GDALDataset* out_ds);
         void extractFeature(std::string layername, GDALDataset* in_ds, GDALDataset* out_ds);
         void dissolveLayer(OGRLayer* in_layer, GDALDataset* in_ds, GDALDataset* out_ds);
 

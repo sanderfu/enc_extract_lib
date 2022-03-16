@@ -7,6 +7,7 @@ check_db_(check_db){
     GDALAllRegister();
     check_db_->CreateLayer("COLLISION", OGRSpatialReference::GetWGS84SRS(), wkbPolygon);
     check_db_->CreateLayer("CAUTION", OGRSpatialReference::GetWGS84SRS(), wkbPolygon);
+    check_db_->CreateLayer("mission_region", OGRSpatialReference::GetWGS84SRS(), wkbPolygon);
     check_db_->CreateLayer("MAP_COVERAGE", OGRSpatialReference::GetWGS84SRS(), wkbPolygon);
     check_db_->CreateLayer("UNKNOWN", OGRSpatialReference::GetWGS84SRS(), wkbPolygon);
 
@@ -175,6 +176,22 @@ void ENCExtractor::extractUnknown(OGRLayer* in_layer, GDALDataset* out_ds){
     out_layer->CreateFeature(new_feat);
 }
 
+void ENCExtractor::extractMissionRegion(GDALDataset* out_ds){
+    OGRPolygon region;
+    OGRLinearRing region_ring;
+    region_ring.addPointM(region_.min_lon_,region_.min_lat_,0);
+    region_ring.addPointM(region_.min_lon_,region_.max_lat_,0);
+    region_ring.addPointM(region_.max_lon_,region_.max_lat_,0);
+    region_ring.addPointM(region_.max_lon_,region_.min_lat_,0);
+    region_ring.addPointM(region_.min_lon_,region_.min_lat_,0);
+    region.addRing(&region_ring);
+
+    OGRLayer* out_layer = out_ds->GetLayerByName("mission_region");
+    OGRFeature* new_feat = OGRFeature::CreateFeature(out_layer->GetLayerDefn());
+    new_feat->SetGeometry(&region);
+    out_layer->CreateFeature(new_feat);
+}
+
 void ENCExtractor::extractFeature(std::string layername, GDALDataset* in_ds, GDALDataset* out_ds){
     OGRLayer* in_layer = in_ds->GetLayerByName(layername.c_str());
     if(in_layer==NULL){
@@ -216,6 +233,7 @@ void ENCExtractor::run(){
         }
     }
     extractUnknown(check_db_->GetLayerByName("map_coverage"),check_db_);
+    extractMissionRegion(check_db_);
     dissolveLayer(check_db_->GetLayerByName("collision"),check_db_,check_db_);
     dissolveLayer(check_db_->GetLayerByName("caution"),check_db_,check_db_);
 }
