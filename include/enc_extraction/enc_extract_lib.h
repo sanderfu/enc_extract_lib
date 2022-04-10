@@ -2,6 +2,7 @@
 #include "string"
 #include "vector"
 #include "unordered_map"
+#include "set"
 #include <fstream>
 #include "iostream"
 #include <boost/algorithm/string.hpp>
@@ -65,6 +66,8 @@ class ENCExtractor{
         std::vector<std::string> feature_layer_names = {"LNDARE","DEPARE","OBSTRN","OFSPLF","PILPNT","PYLONS","SOUNDG","UWTROC","WRECKS","BCNSPP","BOYLAT","BRIDGE","CTNARE","FAIRWY","RESARE","M_COVR"};
         std::vector<std::string> collision_features  = {"LNDARE","DEPARE"}; //,"OBSTRN","OFSPLF","PILPNT","PYLONS","SOUNDG","UWTROC","WRECKS","BCNSPP","BOYLAT","BRIDGE"};
         std::vector<std::string> caution_features = {"CTNARE","FAIRWY","RESARE","BCNSPP","BOYLAT","OBSTRN","OFSPLF","PILPNT","PYLONS"};
+
+        std::set<std::string> layernames_;
 
         void loadDatasets(std::vector<std::string> enc_paths);
         bool pointInRegion(double lon, double lat, extractorRegion& r);

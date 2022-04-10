@@ -109,7 +109,7 @@ void ENCExtractor::addFeaturesToLayer(OGRLayer* in_layer,OGRLayer* out_layer, Mo
     while((feat = in_layer->GetNextFeature()) != NULL){
         if(!addFeature(in_layer,feat,mode)) continue;
         OGRGeometry* geom = feat->GetGeometryRef();
-        if(std::string(geom->getGeometryName())=="POINT"){
+        if(std::string(geom->getGeometryName())=="POINT" || std::string(geom->getGeometryName())=="LINESTRING"){
             OGRGeometry* geom_buffered = geom->Buffer(0.00001*(vessel_.length_)); //0.00001 is approx 1.11 m
             OGRFeature* new_feat = OGRFeature::CreateFeature(out_layer->GetLayerDefn());
             new_feat->SetGeometry(geom_buffered);
@@ -118,6 +118,8 @@ void ENCExtractor::addFeaturesToLayer(OGRLayer* in_layer,OGRLayer* out_layer, Mo
             OGRFeature* new_feat = OGRFeature::CreateFeature(out_layer->GetLayerDefn());
             new_feat->SetGeometry(geom);
             out_layer->CreateFeature(new_feat);
+        } else{
+            std::cout << "Unhandled geometry type: " << std::string(geom->getGeometryName()) << std::endl;
         }
         OGRFeature::DestroyFeature(feat);
     }
@@ -231,7 +233,19 @@ void ENCExtractor::run(){
         for (auto feature_it=feature_layer_names.begin(); feature_it!=feature_layer_names.end(); feature_it++){
             extractFeature(*feature_it,*ds_it,check_db_);
         }
+
+        for( auto&& poLayer: (*ds_it)->GetLayers() )
+        {
+            layernames_.insert(poLayer->GetName());
+        }   
+
     }
+
+    //Print all layers existing inn all included DBs
+    for(auto it=layernames_.begin(); it!= layernames_.end(); it++){
+        std::cout << (*it) << std::endl;
+    }
+
     extractUnknown(check_db_->GetLayerByName("map_coverage"),check_db_);
     extractMissionRegion(check_db_);
     dissolveLayer(check_db_->GetLayerByName("collision"),check_db_,check_db_);

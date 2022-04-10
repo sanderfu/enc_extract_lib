@@ -5,6 +5,7 @@ from osgeo import ogr, osr, gdal
 import sys, getopt, os, glob, csv
 
 def main():
+    producer_code = "NO"
     input = "./ingest"
     output = "./registered"
     targetPattern = "*.000"
