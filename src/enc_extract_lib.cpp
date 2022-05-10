@@ -13,6 +13,7 @@ check_db_(check_db){
 
     
     loadDatasets(determineChartsToLoad(region_));
+    std::vector<std::string> dataset_strings = determineChartsToLoad(region_);
 }
 
 void ENCExtractor::loadDatasets(std::vector<std::string> enc_paths){
@@ -58,6 +59,20 @@ std::vector<std::string> ENCExtractor::determineChartsToLoad(extractorRegion& r)
                 enc_paths.push_back("/home/sanderfu/catkin_ws/src/enc-extraction/registered/"+row[header_map_["filename"]]);
             } else if (pointInRegion(std::stod(row[header_map_["max_long"]]),std::stod(row[header_map_["min_lat"]]),r)){
                 enc_paths.push_back("/home/sanderfu/catkin_ws/src/enc-extraction/registered/"+row[header_map_["filename"]]);
+            } else if (pointInRegion(std::stod(row[header_map_["mid_lon"]]),std::stod(row[header_map_["mid_lat"]]),r)){
+                enc_paths.push_back("/home/sanderfu/catkin_ws/src/enc-extraction/registered/"+row[header_map_["filename"]]);
+            } else {
+                //Check if region corners or center in ENC coverage
+                extractorRegion enc_region(std::stod(row[header_map_["min_long"]]),std::stod(row[header_map_["min_lat"]]),std::stod(row[header_map_["max_long"]]),std::stod(row[header_map_["max_lat"]]));
+                if (pointInRegion(r.min_lon_,r.min_lat_,enc_region)){
+                    enc_paths.push_back("/home/sanderfu/catkin_ws/src/enc-extraction/registered/"+row[header_map_["filename"]]);
+                } else if (pointInRegion(r.min_lon_,r.max_lat_,enc_region)){
+                    enc_paths.push_back("/home/sanderfu/catkin_ws/src/enc-extraction/registered/"+row[header_map_["filename"]]);
+                } else if (pointInRegion(r.max_lon_,r.max_lat_,enc_region)){
+                    enc_paths.push_back("/home/sanderfu/catkin_ws/src/enc-extraction/registered/"+row[header_map_["filename"]]);
+                } else if (pointInRegion(r.max_lon_,r.min_lat_,enc_region)){
+                    enc_paths.push_back("/home/sanderfu/catkin_ws/src/enc-extraction/registered/"+row[header_map_["filename"]]);
+                }
             }
         }
     }
@@ -106,17 +121,31 @@ void ENCExtractor::addFeaturesToLayer(OGRLayer* in_layer,OGRLayer* out_layer, Mo
     manipulateLayer(in_layer);
     OGRFeature* feat;
     in_layer->ResetReading();
+
+    OGRLayer* clipping_layer = check_db_->GetLayerByName("mission_region");
+    clipping_layer->ResetReading();
+    OGRFeature* clipping_feat = clipping_layer->GetNextFeature();
+    OGREnvelope region_env;
+    clipping_feat->GetGeometryRef()->getEnvelope(&region_env);
+
+    OGREnvelope geom_env;
+
+
     while((feat = in_layer->GetNextFeature()) != NULL){
         if(!addFeature(in_layer,feat,mode)) continue;
         OGRGeometry* geom = feat->GetGeometryRef();
+        geom->getEnvelope(&geom_env);
+        if(!geom_env.Intersects(region_env)) continue;
         if(std::string(geom->getGeometryName())=="POINT" || std::string(geom->getGeometryName())=="LINESTRING"){
             OGRGeometry* geom_buffered = geom->Buffer(0.00001*(vessel_.length_)); //0.00001 is approx 1.11 m
             OGRFeature* new_feat = OGRFeature::CreateFeature(out_layer->GetLayerDefn());
-            new_feat->SetGeometry(geom_buffered);
+            OGRGeometry* geom_buffered_in_region = geom_buffered->Intersection(clipping_feat->GetGeometryRef());
+            new_feat->SetGeometry(geom_buffered_in_region);
             out_layer->CreateFeature(new_feat);
         } else if (std::string(geom->getGeometryName())=="POLYGON"){
             OGRFeature* new_feat = OGRFeature::CreateFeature(out_layer->GetLayerDefn());
-            new_feat->SetGeometry(geom);
+            OGRGeometry* geom_in_region = geom->Intersection(clipping_feat->GetGeometryRef());
+            new_feat->SetGeometry(geom_in_region);
             out_layer->CreateFeature(new_feat);
         } else{
             std::cout << "Unhandled geometry type: " << std::string(geom->getGeometryName()) << std::endl;
@@ -220,7 +249,9 @@ void ENCExtractor::dissolveLayer(OGRLayer* in_layer, GDALDataset* in_ds, GDALDat
         multi.addGeometry(feat->GetGeometryRef());
         OGRFeature::DestroyFeature(feat);
     }
+    std::cout << "Dissolve layer waiting on unioncascaded" << std::endl;
     OGRMultiPolygon* union_geom = multi.UnionCascaded()->toMultiPolygon();
+    std::cout << "Union cascaded done" << std::endl;
     for(auto poly: union_geom){
         OGRFeature* out_feat = OGRFeature::CreateFeature(out_dissolved->GetLayerDefn());
         out_feat->SetGeometry(poly);
@@ -228,7 +259,25 @@ void ENCExtractor::dissolveLayer(OGRLayer* in_layer, GDALDataset* in_ds, GDALDat
     }
 }
 
+void ENCExtractor::clipLayer(OGRLayer* in_layer, OGRLayer* clipping_layer, GDALDataset* out_ds){
+    clipping_layer->ResetReading();
+    OGRFeature* clipping_feat = clipping_layer->GetNextFeature();
+
+    OGRLayer* out_layer = check_db_->GetLayerByName("collision_clipped");
+    in_layer->ResetReading();
+    OGRFeature* feat;
+    while((feat = in_layer->GetNextFeature()) != NULL){
+        OGRGeometry* geom = feat->GetGeometryRef()->Intersection(clipping_feat->GetGeometryRef());
+        OGRFeature* new_feat = OGRFeature::CreateFeature(out_layer->GetLayerDefn());
+        new_feat->SetGeometry(geom);
+        out_layer->CreateFeature(new_feat);
+        OGRFeature::DestroyFeature(feat);
+    }
+
+}
+
 void ENCExtractor::run(){
+    extractMissionRegion(check_db_);
     for (auto ds_it=datasets_.begin(); ds_it!=datasets_.end(); ds_it++){
         for (auto feature_it=feature_layer_names.begin(); feature_it!=feature_layer_names.end(); feature_it++){
             extractFeature(*feature_it,*ds_it,check_db_);
@@ -242,14 +291,18 @@ void ENCExtractor::run(){
     }
 
     //Print all layers existing inn all included DBs
+    /*
     for(auto it=layernames_.begin(); it!= layernames_.end(); it++){
         std::cout << (*it) << std::endl;
     }
-
+    */
+    std::cout << "Extract unknown" << std::endl;
     extractUnknown(check_db_->GetLayerByName("map_coverage"),check_db_);
-    extractMissionRegion(check_db_);
+    std::cout << "Extract unknown sucess" << std::endl;
     dissolveLayer(check_db_->GetLayerByName("collision"),check_db_,check_db_);
+    std::cout << "Dissolve collision success" << std::endl;
     dissolveLayer(check_db_->GetLayerByName("caution"),check_db_,check_db_);
+    std::cout << "Dissolve caution success" << std::endl;
 }
 
 

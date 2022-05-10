@@ -6,6 +6,7 @@
 #include <fstream>
 #include "iostream"
 #include <boost/algorithm/string.hpp>
+#include <boost/bind.hpp>
 #include "gdal/ogrsf_frmts.h"
 
 enum S57{
@@ -81,6 +82,7 @@ class ENCExtractor{
         void extractUnknown(OGRLayer* in_layer, GDALDataset* out_ds);
         void extractMissionRegion(GDALDataset* out_ds);
         void extractFeature(std::string layername, GDALDataset* in_ds, GDALDataset* out_ds);
+        void clipLayer(OGRLayer* in_layer, OGRLayer* clipping_layer, GDALDataset* out_ds);
         void dissolveLayer(OGRLayer* in_layer, GDALDataset* in_ds, GDALDataset* out_ds);
 
 
