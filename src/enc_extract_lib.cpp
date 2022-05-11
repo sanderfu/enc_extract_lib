@@ -139,13 +139,13 @@ void ENCExtractor::addFeaturesToLayer(OGRLayer* in_layer,OGRLayer* out_layer, Mo
         if(std::string(geom->getGeometryName())=="POINT" || std::string(geom->getGeometryName())=="LINESTRING"){
             OGRGeometry* geom_buffered = geom->Buffer(0.00001*(vessel_.length_)); //0.00001 is approx 1.11 m
             OGRFeature* new_feat = OGRFeature::CreateFeature(out_layer->GetLayerDefn());
-            OGRGeometry* geom_buffered_in_region = geom_buffered->Intersection(clipping_feat->GetGeometryRef());
-            new_feat->SetGeometry(geom_buffered_in_region);
+            //OGRGeometry* geom_buffered_in_region = geom_buffered->Intersection(clipping_feat->GetGeometryRef());
+            new_feat->SetGeometry(geom_buffered);
             out_layer->CreateFeature(new_feat);
         } else if (std::string(geom->getGeometryName())=="POLYGON"){
             OGRFeature* new_feat = OGRFeature::CreateFeature(out_layer->GetLayerDefn());
-            OGRGeometry* geom_in_region = geom->Intersection(clipping_feat->GetGeometryRef());
-            new_feat->SetGeometry(geom_in_region);
+            //OGRGeometry* geom_in_region = geom->Intersection(clipping_feat->GetGeometryRef());
+            new_feat->SetGeometry(geom);
             out_layer->CreateFeature(new_feat);
         } else{
             std::cout << "Unhandled geometry type: " << std::string(geom->getGeometryName()) << std::endl;
@@ -263,7 +263,7 @@ void ENCExtractor::clipLayer(OGRLayer* in_layer, OGRLayer* clipping_layer, GDALD
     clipping_layer->ResetReading();
     OGRFeature* clipping_feat = clipping_layer->GetNextFeature();
 
-    OGRLayer* out_layer = check_db_->GetLayerByName("collision_clipped");
+    OGRLayer* out_layer = out_ds->CreateLayer((std::string(in_layer->GetName())+"_clipped").c_str(),in_layer->GetSpatialRef(),wkbPolygon);
     in_layer->ResetReading();
     OGRFeature* feat;
     while((feat = in_layer->GetNextFeature()) != NULL){
@@ -296,10 +296,12 @@ void ENCExtractor::run(){
         std::cout << (*it) << std::endl;
     }
     */
+
     std::cout << "Extract unknown" << std::endl;
     extractUnknown(check_db_->GetLayerByName("map_coverage"),check_db_);
     std::cout << "Extract unknown sucess" << std::endl;
     dissolveLayer(check_db_->GetLayerByName("collision"),check_db_,check_db_);
+    clipLayer(check_db_->GetLayerByName("collision_dissolved"),check_db_->GetLayerByName("mission_region"),check_db_);
     std::cout << "Dissolve collision success" << std::endl;
     dissolveLayer(check_db_->GetLayerByName("caution"),check_db_,check_db_);
     std::cout << "Dissolve caution success" << std::endl;
