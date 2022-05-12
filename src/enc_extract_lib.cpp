@@ -196,14 +196,13 @@ void ENCExtractor::extractUnknown(OGRLayer* in_layer, GDALDataset* out_ds){
         OGRFeature::DestroyFeature(feat);
     }
     
-    OGRPolygon* map_coverage_poly = map_coverage.Simplify(0.0001)->toPolygon(); //Ramer–Douglas–Peucker algorithm used for simplify
-    OGRPolygon unknown_poly = *region.Difference(map_coverage_poly)->toPolygon();
+    OGRGeometry* unknown_geom = region.Difference(&map_coverage);
     OGRLayer* out_layer = out_ds->GetLayerByName("unknown");
     if(out_layer==NULL){
         throw std::runtime_error("Unable to open collision layer in output dataset");
     }
     OGRFeature* new_feat = OGRFeature::CreateFeature(out_layer->GetLayerDefn());
-    new_feat->SetGeometry(&unknown_poly);
+    new_feat->SetGeometry(unknown_geom);
     out_layer->CreateFeature(new_feat);
 }
 
@@ -259,11 +258,18 @@ void ENCExtractor::dissolveLayer(OGRLayer* in_layer, GDALDataset* in_ds, GDALDat
         OGRFeature::DestroyFeature(feat);
     }
     std::cout << "Dissolve layer waiting on unioncascaded" << std::endl;
-    OGRMultiPolygon* union_geom = multi.UnionCascaded()->toMultiPolygon();
-    std::cout << "Union cascaded done" << std::endl;
-    for(auto poly: union_geom){
+    OGRGeometry* union_geom = multi.UnionCascaded();
+    std::cout << "Union geometry type type: " << wkbFlatten(union_geom->getGeometryType()) << std::endl;
+    if(wkbFlatten(union_geom->getGeometryType())==wkbMultiPolygon){
+        OGRMultiPolygon* multi_poly = union_geom->toMultiPolygon();
+        for(auto poly: multi_poly){
+            OGRFeature* out_feat = OGRFeature::CreateFeature(out_dissolved->GetLayerDefn());
+            out_feat->SetGeometry(poly);
+            out_dissolved->CreateFeature(out_feat);
+        }
+    } else{
         OGRFeature* out_feat = OGRFeature::CreateFeature(out_dissolved->GetLayerDefn());
-        out_feat->SetGeometry(poly);
+        out_feat->SetGeometry(union_geom);
         out_dissolved->CreateFeature(out_feat);
     }
 }
@@ -305,16 +311,12 @@ void ENCExtractor::run(){
         std::cout << (*it) << std::endl;
     }
     */
-
     std::cout << "Extract unknown" << std::endl;
     extractUnknown(check_db_->GetLayerByName("map_coverage"),check_db_);
-    std::cout << "Extract unknown sucess" << std::endl;
+    std::cout << "Extraction complete" << std::endl;
     dissolveLayer(check_db_->GetLayerByName("collision"),check_db_,check_db_);
-    //clipLayer(check_db_->GetLayerByName("collision_dissolved"),check_db_->GetLayerByName("mission_region"),check_db_);
-    std::cout << "Dissolve collision success" << std::endl;
     dissolveLayer(check_db_->GetLayerByName("caution"),check_db_,check_db_);
-    //clipLayer(check_db_->GetLayerByName("caution_dissolved"),check_db_->GetLayerByName("mission_region"),check_db_);
-    std::cout << "Dissolve caution success" << std::endl;
+    //dissolveLayer(check_db_->GetLayerByName("map_coverage"),check_db_,check_db_);
 }
 
 
