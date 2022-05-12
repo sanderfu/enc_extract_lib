@@ -139,13 +139,13 @@ void ENCExtractor::addFeaturesToLayer(OGRLayer* in_layer,OGRLayer* out_layer, Mo
         if(std::string(geom->getGeometryName())=="POINT" || std::string(geom->getGeometryName())=="LINESTRING"){
             OGRGeometry* geom_buffered = geom->Buffer(0.00001*(vessel_.length_)); //0.00001 is approx 1.11 m
             OGRFeature* new_feat = OGRFeature::CreateFeature(out_layer->GetLayerDefn());
-            //OGRGeometry* geom_buffered_in_region = geom_buffered->Intersection(clipping_feat->GetGeometryRef());
-            new_feat->SetGeometry(geom_buffered);
+            OGRGeometry* geom_buffered_in_region = geom_buffered->Intersection(clipping_feat->GetGeometryRef());
+            new_feat->SetGeometry(geom_buffered_in_region);
             out_layer->CreateFeature(new_feat);
         } else if (std::string(geom->getGeometryName())=="POLYGON"){
             OGRFeature* new_feat = OGRFeature::CreateFeature(out_layer->GetLayerDefn());
-            //OGRGeometry* geom_in_region = geom->Intersection(clipping_feat->GetGeometryRef());
-            new_feat->SetGeometry(geom);
+            OGRGeometry* geom_in_region = geom->Intersection(clipping_feat->GetGeometryRef());
+            new_feat->SetGeometry(geom_in_region);
             out_layer->CreateFeature(new_feat);
         } else{
             std::cout << "Unhandled geometry type: " << std::string(geom->getGeometryName()) << std::endl;
@@ -245,8 +245,17 @@ void ENCExtractor::dissolveLayer(OGRLayer* in_layer, GDALDataset* in_ds, GDALDat
     OGRFeature* feat;
     in_layer->ResetReading();
     while((feat=in_layer->GetNextFeature())!=NULL){
-        feat->GetGeometryRef()->closeRings();
-        multi.addGeometry(feat->GetGeometryRef());
+        if(wkbFlatten(feat->GetGeometryRef()->getGeometryType())==wkbMultiPolygon){
+            OGRMultiPolygon* multi_poly = feat->GetGeometryRef()->toMultiPolygon();
+            for(int i=0; i< multi_poly->getNumGeometries(); i++){
+                OGRGeometry* poly = multi_poly->getGeometryRef(i);
+                poly->closeRings();
+                multi.addGeometry(poly);
+            }
+        } else{
+            feat->GetGeometryRef()->closeRings();
+            multi.addGeometry(feat->GetGeometryRef());
+        }
         OGRFeature::DestroyFeature(feat);
     }
     std::cout << "Dissolve layer waiting on unioncascaded" << std::endl;
@@ -301,9 +310,10 @@ void ENCExtractor::run(){
     extractUnknown(check_db_->GetLayerByName("map_coverage"),check_db_);
     std::cout << "Extract unknown sucess" << std::endl;
     dissolveLayer(check_db_->GetLayerByName("collision"),check_db_,check_db_);
-    clipLayer(check_db_->GetLayerByName("collision_dissolved"),check_db_->GetLayerByName("mission_region"),check_db_);
+    //clipLayer(check_db_->GetLayerByName("collision_dissolved"),check_db_->GetLayerByName("mission_region"),check_db_);
     std::cout << "Dissolve collision success" << std::endl;
     dissolveLayer(check_db_->GetLayerByName("caution"),check_db_,check_db_);
+    //clipLayer(check_db_->GetLayerByName("caution_dissolved"),check_db_->GetLayerByName("mission_region"),check_db_);
     std::cout << "Dissolve caution success" << std::endl;
 }
 
