@@ -15,7 +15,11 @@ int main(int argc, char *argv[]){
     }
     std::string check_path = path+"/data/check_db.sqlite";
     GDALDataset* check_db = driver_sqlite->Create(check_path.c_str(),0,0,0,GDT_Unknown,NULL);
-    ENCExtractor extractor(r,v,check_db);
+
+    std::string db_detailed_path = path+"/data/detailed_db.sqlite";
+    GDALDataset* db_detailed = driver_sqlite->Create(db_detailed_path.c_str(),0,0,0,GDT_Unknown,NULL);
+
+    ENCExtractor extractor(r,v,check_db,db_detailed);
     extractor.run();
     //ros::spin();
 }

@@ -53,7 +53,7 @@ struct extractorVessel{
 
 class ENCExtractor{
     public:
-        ENCExtractor(extractorRegion& r, extractorVessel& v, GDALDataset* check_db_);
+        ENCExtractor(extractorRegion& r, extractorVessel& v, GDALDataset* check_db,GDALDataset* detailed_db);
         void run();
     private:
         std::vector<GDALDataset*> datasets_;
@@ -64,9 +64,9 @@ class ENCExtractor{
         GDALDataset* check_db_;
         GDALDataset* detailed_db_;
 
-        std::vector<std::string> feature_layer_names = {"LNDARE","DEPARE","OBSTRN","OFSPLF","PILPNT","PYLONS","SOUNDG","UWTROC","WRECKS","BCNSPP","BOYLAT","BRIDGE","CTNARE","FAIRWY","RESARE","M_COVR"};
-        std::vector<std::string> collision_features  = {"LNDARE","DEPARE"}; //,"OBSTRN","OFSPLF","PILPNT","PYLONS","SOUNDG","UWTROC","WRECKS","BCNSPP","BOYLAT","BRIDGE"};
-        std::vector<std::string> caution_features = {"CTNARE","FAIRWY","RESARE","BCNSPP","BOYLAT","OBSTRN","OFSPLF","PILPNT","PYLONS"};
+        std::vector<std::string> feature_layer_names = {"LNDARE","DEPARE","OBSTRN","OFSPLF","PILPNT","PYLONS","SOUNDG","UWTROC","WRECKS","BCNSPP","BOYLAT","BRIDGE","CTNARE","FAIRWY","RESARE","M_COVR","DWRTCL","DWRTPT","ISTZNE","PRCARE","TSELNE","TSEZNE","TSSBND","TSSCRS","TSSLPT","TSSRON"};
+        std::vector<std::string> collision_features  = {"LNDARE","DEPARE","OBSTRN","OFSPLF","PILPNT","PYLONS","SOUNDG","UWTROC","WRECKS","BCNSPP","BOYLAT","BRIDGE"};
+        std::vector<std::string> caution_features = {"CTNARE","FAIRWY","RESARE","BCNSPP","BOYLAT","OBSTRN","OFSPLF","PILPNT","PYLONS","DWRTCL","DWRTPT","ISTZNE","PRCARE","TSELNE","TSEZNE","TSSBND","TSSCRS","TSSLPT","TSSRON"};
 
         std::set<std::string> layernames_;
 

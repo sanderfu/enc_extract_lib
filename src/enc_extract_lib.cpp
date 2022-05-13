@@ -1,9 +1,10 @@
 #include "enc_extraction/enc_extract_lib.h"
 
-ENCExtractor::ENCExtractor(extractorRegion& r, extractorVessel& v,GDALDataset* check_db):
+ENCExtractor::ENCExtractor(extractorRegion& r, extractorVessel& v,GDALDataset* check_db,GDALDataset* detailed_db):
 region_(r),
 vessel_(v),
-check_db_(check_db){
+check_db_(check_db),
+detailed_db_(detailed_db){
     GDALAllRegister();
     check_db_->CreateLayer("COLLISION", OGRSpatialReference::GetWGS84SRS(), wkbPolygon);
     check_db_->CreateLayer("CAUTION", OGRSpatialReference::GetWGS84SRS(), wkbPolygon);
@@ -11,6 +12,7 @@ check_db_(check_db){
     check_db_->CreateLayer("MAP_COVERAGE", OGRSpatialReference::GetWGS84SRS(), wkbPolygon);
     check_db_->CreateLayer("UNKNOWN", OGRSpatialReference::GetWGS84SRS(), wkbPolygon);
 
+    detailed_db_->CreateLayer("mission_region", OGRSpatialReference::GetWGS84SRS(), wkbPolygon);
     
     loadDatasets(determineChartsToLoad(region_));
     std::vector<std::string> dataset_strings = determineChartsToLoad(region_);
@@ -292,31 +294,63 @@ void ENCExtractor::clipLayer(OGRLayer* in_layer, OGRLayer* clipping_layer, GDALD
 }
 
 void ENCExtractor::run(){
+
+    //Generate check database
     extractMissionRegion(check_db_);
     for (auto ds_it=datasets_.begin(); ds_it!=datasets_.end(); ds_it++){
         for (auto feature_it=feature_layer_names.begin(); feature_it!=feature_layer_names.end(); feature_it++){
             extractFeature(*feature_it,*ds_it,check_db_);
         }
-
-        for( auto&& poLayer: (*ds_it)->GetLayers() )
-        {
-            layernames_.insert(poLayer->GetName());
-        }   
-
     }
-
-    //Print all layers existing inn all included DBs
-    /*
-    for(auto it=layernames_.begin(); it!= layernames_.end(); it++){
-        std::cout << (*it) << std::endl;
-    }
-    */
-    std::cout << "Extract unknown" << std::endl;
     extractUnknown(check_db_->GetLayerByName("map_coverage"),check_db_);
-    std::cout << "Extraction complete" << std::endl;
     dissolveLayer(check_db_->GetLayerByName("collision"),check_db_,check_db_);
     dissolveLayer(check_db_->GetLayerByName("caution"),check_db_,check_db_);
-    //dissolveLayer(check_db_->GetLayerByName("map_coverage"),check_db_,check_db_);
+    
+    //Generate detailed database
+    extractMissionRegion(detailed_db_);
+
+    //Generate detailed database
+    std::map<std::string,int> fid_map;
+    for (auto feature_it=feature_layer_names.begin(); feature_it!=feature_layer_names.end(); feature_it++){
+        fid_map.insert(std::make_pair((*feature_it),0));
+    }
+
+    //Get mission region clipping geometry
+    OGRLayer* clipping_layer = detailed_db_->GetLayerByName("mission_region");
+    clipping_layer->ResetReading();
+    OGRFeature* clipping_feat = clipping_layer->GetNextFeature();
+    OGREnvelope region_env;
+    clipping_feat->GetGeometryRef()->getEnvelope(&region_env);
+    OGREnvelope feat_env;
+
+    OGRFeature* feat;
+    for (auto ds_it=datasets_.begin(); ds_it!=datasets_.end(); ds_it++){
+        for (auto feature_it=feature_layer_names.begin(); feature_it!=feature_layer_names.end(); feature_it++){
+            OGRLayer* in_layer = (*ds_it)->GetLayerByName((*feature_it).c_str());
+            if(in_layer==NULL){
+                //Current ds does not have this layer. This is normal, as not all objects are present in all Datasources.
+                continue;
+            }
+            OGRLayer* out_layer = (detailed_db_)->GetLayerByName((*feature_it).c_str());
+            if(out_layer==NULL){
+                out_layer= detailed_db_->CreateLayer((*feature_it).c_str(), OGRSpatialReference::GetWGS84SRS(), wkbPolygon);
+            }
+            OGRFeature* feat;
+            OGRFeature* new_feat;
+            in_layer->ResetReading();
+            while((feat=in_layer->GetNextFeature())!=NULL){
+                feat->GetGeometryRef()->getEnvelope(&feat_env);
+                if(!feat_env.Intersects(region_env)) continue;
+                fid_map[(*feature_it)]++;
+                new_feat = feat->Clone();
+                new_feat->SetGeometry(new_feat->GetGeometryRef()->Intersection(clipping_feat->GetGeometryRef()));
+                new_feat->SetFID(fid_map[(*feature_it)]);
+                out_layer->CreateFeature(new_feat);
+            }
+            out_layer->SyncToDisk();
+            OGRFeature::DestroyFeature(feat);
+        }
+    }
 }
 
 
